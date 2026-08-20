@@ -1,0 +1,46 @@
+@DomainTracker.API_HostAddress = http://localhost:5254
+
+### Check a domain's availability (public, no auth)
+GET {{DomainTracker.API_HostAddress}}/api/domains/check?name=nicproxy.com
+Accept: application/json
+
+### Register a new user
+POST {{DomainTracker.API_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "demo_user",
+  "password": "Passw0rd!"
+}
+
+### Login (copy the "token" from the response and paste it below as {{authToken}})
+POST {{DomainTracker.API_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo_user",
+  "password": "Passw0rd!"
+}
+
+@authToken = paste-token-here
+
+### List my favorites
+GET {{DomainTracker.API_HostAddress}}/api/favorites
+Authorization: Bearer {{authToken}}
+
+### Add a favorite
+POST {{DomainTracker.API_HostAddress}}/api/favorites
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "domainName": "nicproxy.com"
+}
+
+### Refresh a favorite's info (replace {id})
+POST {{DomainTracker.API_HostAddress}}/api/favorites/1/refresh
+Authorization: Bearer {{authToken}}
+
+### Remove a favorite (replace {id})
+DELETE {{DomainTracker.API_HostAddress}}/api/favorites/1
+Authorization: Bearer {{authToken}}

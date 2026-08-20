@@ -1,0 +1,12 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Root-level env, just in case
+.env
+
+# apps/api and apps/web each carry their own .gitignore for their
+# stack-specific build output (bin/obj, node_modules/dist, etc).

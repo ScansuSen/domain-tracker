@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+**/.vs/
+**/logs/
+**/TestResults/
+DomainTracker.Tests/

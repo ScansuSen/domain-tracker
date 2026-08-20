@@ -1,0 +1,22 @@
+# Build results
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# NLog runtime output
+logs/
+
+# Test results
+TestResults/
+
+# User-specific files
+*.userosscache
+*.sln.docstates

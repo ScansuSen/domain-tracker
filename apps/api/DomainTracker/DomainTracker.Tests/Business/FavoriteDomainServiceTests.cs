@@ -1,0 +1,153 @@
+using DomainTracker.Business.Abstract;
+using DomainTracker.Business.Concrete;
+using DomainTracker.Core.Results;
+using DomainTracker.DataAccess.Abstract;
+using DomainTracker.DTOs.Domains;
+using DomainTracker.Entities.Models;
+using Moq;
+using Xunit;
+
+namespace DomainTracker.Tests.Business
+{
+    public class FavoriteDomainServiceTests
+    {
+        private readonly Mock<IFavoriteDomainRepository> _favoriteDomainRepository = new();
+        private readonly Mock<IDomainRepository> _domainRepository = new();
+        private readonly Mock<IDomainService> _domainService = new();
+        private readonly FavoriteDomainService _sut;
+
+        public FavoriteDomainServiceTests()
+        {
+            _sut = new FavoriteDomainService(_favoriteDomainRepository.Object, _domainRepository.Object, _domainService.Object, TestMapper.Create());
+        }
+
+        [Fact]
+        public async Task AddAsync_WhenDomainCheckFails_PropagatesFailureWithoutPersisting()
+        {
+            _domainService
+                .Setup(s => s.CheckAsync("not_a_valid_domain"))
+                .ReturnsAsync(new ErrorDataResult<DomainResponseDto>(400, "Name: 'not_a_valid_domain' is not a valid domain name."));
+
+            var result = await _sut.AddAsync(1, "not_a_valid_domain");
+
+            Assert.False(result.Success);
+            Assert.Equal(400, result.StatusCode);
+            _domainRepository.Verify(r => r.GetByNameAsync(It.IsAny<string>()), Times.Never);
+            _favoriteDomainRepository.Verify(r => r.AddAsync(It.IsAny<FavoriteDomain>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task AddAsync_WhenAlreadyFavorite_ReturnsConflictResultWithoutInsertingAgain()
+        {
+            var domain = new Domain { Id = 10, Name = "example.com" };
+            _domainService
+                .Setup(s => s.CheckAsync("example.com"))
+                .ReturnsAsync(new SuccessDataResult<DomainResponseDto>(new DomainResponseDto(10, "example.com", true, DateTime.UtcNow, null)));
+            _domainRepository.Setup(r => r.GetByNameAsync("example.com")).ReturnsAsync(domain);
+            _favoriteDomainRepository.Setup(r => r.ExistsAsync(1, 10)).ReturnsAsync(true);
+
+            var result = await _sut.AddAsync(1, "example.com");
+
+            Assert.False(result.Success);
+            Assert.Equal(409, result.StatusCode);
+            _favoriteDomainRepository.Verify(r => r.AddAsync(It.IsAny<FavoriteDomain>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task AddAsync_WhenNotYetFavorite_PersistsLinkAndReturnsDto()
+        {
+            var domain = new Domain
+            {
+                Id = 10,
+                Name = "example.com",
+                IsAvailable = false,
+                LastCheckedAt = DateTime.UtcNow,
+                ExpirationDate = new DateTime(2030, 1, 1),
+            };
+            _domainService
+                .Setup(s => s.CheckAsync("example.com"))
+                .ReturnsAsync(new SuccessDataResult<DomainResponseDto>(new DomainResponseDto(10, "example.com", false, domain.LastCheckedAt, domain.ExpirationDate)));
+            _domainRepository.Setup(r => r.GetByNameAsync("example.com")).ReturnsAsync(domain);
+            _favoriteDomainRepository.Setup(r => r.ExistsAsync(1, 10)).ReturnsAsync(false);
+
+            var result = await _sut.AddAsync(1, "example.com");
+
+            Assert.True(result.Success);
+            Assert.Equal(201, result.StatusCode);
+            Assert.Equal("example.com", result.Data!.DomainName);
+            Assert.False(result.Data.IsAvailable);
+            _favoriteDomainRepository.Verify(
+                r => r.AddAsync(It.Is<FavoriteDomain>(f => f.UserId == 1 && f.DomainId == 10)),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteAsync_WhenFavoriteBelongsToAnotherUser_ReturnsNotFoundResultAndDoesNotDelete()
+        {
+            var favorite = new FavoriteDomain { Id = 3, UserId = 2, DomainId = 10 };
+            _favoriteDomainRepository.Setup(r => r.GetByIdAsync(3)).ReturnsAsync(favorite);
+
+            var result = await _sut.DeleteAsync(1, 3);
+
+            Assert.False(result.Success);
+            Assert.Equal(404, result.StatusCode);
+            _favoriteDomainRepository.Verify(r => r.DeleteAsync(It.IsAny<FavoriteDomain>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteAsync_WhenFavoriteDoesNotExist_ReturnsNotFoundResult()
+        {
+            _favoriteDomainRepository.Setup(r => r.GetByIdAsync(99)).ReturnsAsync((FavoriteDomain?)null);
+
+            var result = await _sut.DeleteAsync(1, 99);
+
+            Assert.False(result.Success);
+            Assert.Equal(404, result.StatusCode);
+        }
+
+        [Fact]
+        public async Task DeleteAsync_WhenOwnedByCaller_DeletesAndReturnsSuccessResult()
+        {
+            var favorite = new FavoriteDomain { Id = 3, UserId = 1, DomainId = 10 };
+            _favoriteDomainRepository.Setup(r => r.GetByIdAsync(3)).ReturnsAsync(favorite);
+
+            var result = await _sut.DeleteAsync(1, 3);
+
+            Assert.True(result.Success);
+            _favoriteDomainRepository.Verify(r => r.DeleteAsync(favorite), Times.Once);
+        }
+
+        [Fact]
+        public async Task RefreshAsync_WhenOwnedByCaller_ReRunsDomainCheckAndReturnsUpdatedInfo()
+        {
+            var domain = new Domain { Id = 10, Name = "example.com", IsAvailable = true, LastCheckedAt = DateTime.UtcNow.AddDays(-1) };
+            var favorite = new FavoriteDomain { Id = 3, UserId = 1, DomainId = 10, Domain = domain, CreatedAt = DateTime.UtcNow.AddDays(-2) };
+            _favoriteDomainRepository.Setup(r => r.GetByIdWithDomainAsync(3)).ReturnsAsync(favorite);
+            var refreshedAt = DateTime.UtcNow;
+            _domainService
+                .Setup(s => s.CheckAsync("example.com"))
+                .ReturnsAsync(new SuccessDataResult<DomainResponseDto>(new DomainResponseDto(10, "example.com", false, refreshedAt, new DateTime(2031, 1, 1))));
+
+            var result = await _sut.RefreshAsync(1, 3);
+
+            Assert.True(result.Success);
+            Assert.False(result.Data!.IsAvailable);
+            Assert.Equal(new DateTime(2031, 1, 1), result.Data.ExpirationDate);
+            Assert.Equal(refreshedAt, result.Data.LastCheckedAt);
+        }
+
+        [Fact]
+        public async Task RefreshAsync_WhenFavoriteBelongsToAnotherUser_ReturnsNotFoundResult()
+        {
+            var domain = new Domain { Id = 10, Name = "example.com" };
+            var favorite = new FavoriteDomain { Id = 3, UserId = 2, DomainId = 10, Domain = domain };
+            _favoriteDomainRepository.Setup(r => r.GetByIdWithDomainAsync(3)).ReturnsAsync(favorite);
+
+            var result = await _sut.RefreshAsync(1, 3);
+
+            Assert.False(result.Success);
+            Assert.Equal(404, result.StatusCode);
+            _domainService.Verify(s => s.CheckAsync(It.IsAny<string>()), Times.Never);
+        }
+    }
+}

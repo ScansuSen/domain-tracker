@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="DomainTracker.API/DomainTracker.API.csproj" />
+  <Project Path="DomainTracker.Business/DomainTracker.Business.csproj" />
+  <Project Path="DomainTracker.Core/DomainTracker.Core.csproj" />
+  <Project Path="DomainTracker.DataAccess/DomainTracker.DataAccess.csproj" />
+  <Project Path="DomainTracker.DTOs/DomainTracker.DTOs.csproj" />
+  <Project Path="DomainTracker.Entities/DomainTracker.Entities.csproj" />
+  <Project Path="DomainTracker.Tests/DomainTracker.Tests.csproj" />
+</Solution>

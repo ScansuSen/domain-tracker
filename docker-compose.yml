@@ -1,0 +1,47 @@
+# One-command way to run the whole thing (API + SQL Server + frontend) without installing
+# .NET, Node, or SQL Server locally - only Docker is required.
+#
+#   docker compose up --build
+#
+# Then open http://localhost:3000. Swagger is at http://localhost:8080/swagger.
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "DomainTracker_Dev1"
+    ports:
+      - "1433:1433"
+    volumes:
+      - domaintracker-sqldata:/var/opt/mssql
+
+  api:
+    build:
+      context: ./apps/api/DomainTracker
+      dockerfile: DomainTracker.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver;Database=DomainTracker;User Id=sa;Password=DomainTracker_Dev1;TrustServerCertificate=True;
+      # Dev-only signing key so this stack runs out of the box - see apps/api/README's "before you
+      # push this anywhere public" note.
+      Jwt__Key: "qQBIyfgp4v8lZClZS9VIPQWZKKCVdxtI7vsNcFKni1wK+XyCC1dzhpxFypXySu3I"
+      Jwt__Issuer: "DomainTracker.API"
+      Jwt__Audience: "DomainTracker.Client"
+      Jwt__ExpiryMinutes: "60"
+    depends_on:
+      - sqlserver
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: ./apps/web
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
+volumes:
+  domaintracker-sqldata:
