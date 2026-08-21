@@ -13,7 +13,8 @@ namespace DomainTracker.Business.Models
         [JsonPropertyName("eventAction")]
         public string? EventAction { get; set; }
 
+        // Used DateTimeOffset to preserve the timezone information from RDAP.
         [JsonPropertyName("eventDate")]
-        public DateTime? EventDate { get; set; }
+        public DateTimeOffset? EventDate { get; set; }
     }
 }

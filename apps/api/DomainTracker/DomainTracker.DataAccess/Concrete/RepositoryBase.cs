@@ -1,3 +1,4 @@
+using System.Linq;
 using DomainTracker.DataAccess.Abstract;
 using DomainTracker.DataAccess.Context;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,9 @@ namespace DomainTracker.DataAccess.Concrete
 
         public virtual async Task UpdateAsync(TEntity entity)
         {
-            DbSet.Update(entity);
+            var alreadyTracked = Context.ChangeTracker.Entries<TEntity>().Any(e => ReferenceEquals(e.Entity, entity));
+            if (!alreadyTracked)
+                DbSet.Update(entity);
             await Context.SaveChangesAsync();
         }
 

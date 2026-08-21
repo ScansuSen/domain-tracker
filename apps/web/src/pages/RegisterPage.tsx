@@ -24,8 +24,8 @@ export function RegisterPage() {
       setError('Passwords do not match.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 3) {
+      setError('Password must be at least 3 characters.');
       return;
     }
 
@@ -84,7 +84,7 @@ export function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={3}
               />
             </div>
             <div className="mb-3">

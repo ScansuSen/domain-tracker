@@ -6,6 +6,8 @@ namespace DomainTracker.Business.Validation
 {
     public class RegisterRequestValidator : AbstractValidator<RegisterRequestDto>
     {
+        private const int MinimumPasswordLength = 3;
+
         public RegisterRequestValidator()
         {
             RuleFor(x => x.Username)
@@ -15,7 +17,7 @@ namespace DomainTracker.Business.Validation
 
             RuleFor(x => x.Password)
                 .NotEmpty().WithMessage(Messages.PasswordRequired)
-                .MinimumLength(6).WithMessage(Messages.PasswordTooShort)
+                .MinimumLength(MinimumPasswordLength).WithMessage(Messages.PasswordTooShort(MinimumPasswordLength))
                 .MaximumLength(100).WithMessage(Messages.PasswordTooLong);
         }
     }

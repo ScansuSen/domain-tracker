@@ -14,6 +14,8 @@ public static class HttpStatusCodes
 
     public const int Conflict = 409;
 
+    public const int TooManyRequests = 429;
+
     public const int InternalServerError = 500;
 
     public const int BadGateway = 502;

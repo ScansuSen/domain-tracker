@@ -1,9 +1,13 @@
 using DomainTracker.Business.Abstract;
 using DomainTracker.DTOs.Domains;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace DomainTracker.API.Controllers
 {
+  
+    [Authorize]
     [Route("api/[controller]")]
     public class DomainsController : ApiControllerBase
     {
@@ -15,6 +19,7 @@ namespace DomainTracker.API.Controllers
         }
 
         [HttpGet("check")]
+        [EnableRateLimiting(RateLimiterPolicies.DomainCheck)]
         public async Task<IActionResult> Check([FromQuery] DomainCheckRequestDto request)
         {
             var result = await _domainService.CheckAsync(request.Name);

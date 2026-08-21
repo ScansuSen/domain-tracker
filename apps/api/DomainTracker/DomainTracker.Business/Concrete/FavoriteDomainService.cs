@@ -2,8 +2,9 @@ using AutoMapper;
 using DomainTracker.Business.Abstract;
 using DomainTracker.Core.Constants;
 using DomainTracker.Core.Results;
-using DomainTracker.Core.Utilities;
 using DomainTracker.DataAccess.Abstract;
+using DomainTracker.DataAccess.Enums;
+using DomainTracker.DataAccess.Models;
 using DomainTracker.DTOs.Favorites;
 using DomainTracker.Entities.Models;
 
@@ -12,18 +13,15 @@ namespace DomainTracker.Business.Concrete
     public class FavoriteDomainService : IFavoriteDomainService
     {
         private readonly IFavoriteDomainRepository _favoriteDomainRepository;
-        private readonly IDomainRepository _domainRepository;
         private readonly IDomainService _domainService;
         private readonly IMapper _mapper;
 
         public FavoriteDomainService(
             IFavoriteDomainRepository favoriteDomainRepository,
-            IDomainRepository domainRepository,
             IDomainService domainService,
             IMapper mapper)
         {
             _favoriteDomainRepository = favoriteDomainRepository;
-            _domainRepository = domainRepository;
             _domainService = domainService;
             _mapper = mapper;
         }
@@ -41,19 +39,14 @@ namespace DomainTracker.Business.Concrete
             if (!checkResult.Success)
                 return new ErrorDataResult<FavoriteDomainResponseDto>(checkResult.StatusCode, checkResult.Messages);
 
-            var normalizedName = DomainNameNormalizer.Normalize(domainName);
-            var domain = await _domainRepository.GetByNameAsync(normalizedName);
-            if (domain is null)
-                throw new InvalidOperationException(Messages.DomainNotPersistedAfterCheck(normalizedName));//throw because unexpected error
+            var checkedDomain = checkResult.Data!;
 
-            if (await _favoriteDomainRepository.ExistsAsync(userId, domain.Id))
-                return new ErrorDataResult<FavoriteDomainResponseDto>(HttpStatusCodes.Conflict, Messages.DomainAlreadyInFavorites(normalizedName));
+            var checkInfo = new DomainCheckInfo(checkedDomain.IsAvailable, checkedDomain.LastCheckedAt, checkedDomain.ExpirationDate);
+            var (outcome, favorite) = await _favoriteDomainRepository.AddFavoriteAsync(userId, checkedDomain.Name, checkInfo);
+            if (outcome == AddFavoriteOutcome.AlreadyFavorited)
+                return new ErrorDataResult<FavoriteDomainResponseDto>(HttpStatusCodes.Conflict, Messages.DomainAlreadyInFavorites(checkedDomain.Name));
 
-            var favorite = new FavoriteDomain { UserId = userId, DomainId = domain.Id };
-            await _favoriteDomainRepository.AddAsync(favorite);
-
-            favorite.Domain = domain;
-            return new SuccessDataResult<FavoriteDomainResponseDto>(_mapper.Map<FavoriteDomainResponseDto>(favorite), HttpStatusCodes.Created, Messages.DomainAddedToFavorites);
+            return new SuccessDataResult<FavoriteDomainResponseDto>(_mapper.Map<FavoriteDomainResponseDto>(favorite!), HttpStatusCodes.Created, Messages.DomainAddedToFavorites);
         }
 
         public async Task<IResult> DeleteAsync(int userId, int favoriteId)
@@ -73,10 +66,13 @@ namespace DomainTracker.Business.Concrete
             if (favorite is null || favorite.UserId != userId)
                 return new ErrorDataResult<FavoriteDomainResponseDto>(HttpStatusCodes.NotFound, Messages.FavoriteNotFound(favoriteId));
 
-            var refreshed = (await _domainService.CheckAsync(favorite.Domain.Name)).Data!;
-            favorite.Domain.IsAvailable = refreshed.IsAvailable;
-            favorite.Domain.LastCheckedAt = refreshed.LastCheckedAt;
-            favorite.Domain.ExpirationDate = refreshed.ExpirationDate;
+            var checkResult = await _domainService.CheckAsync(favorite.Domain.Name);
+            if (!checkResult.Success)
+                return new ErrorDataResult<FavoriteDomainResponseDto>(checkResult.StatusCode, checkResult.Messages);
+
+            var refreshed = checkResult.Data!;
+            var checkInfo = new DomainCheckInfo(refreshed.IsAvailable, refreshed.LastCheckedAt, refreshed.ExpirationDate);
+            await _favoriteDomainRepository.RefreshDomainAsync(favorite, checkInfo);
 
             return new SuccessDataResult<FavoriteDomainResponseDto>(_mapper.Map<FavoriteDomainResponseDto>(favorite), HttpStatusCodes.Ok, Messages.FavoriteRefreshed);
         }

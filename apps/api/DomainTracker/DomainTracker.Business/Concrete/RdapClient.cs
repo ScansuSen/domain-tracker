@@ -61,7 +61,7 @@ namespace DomainTracker.Business.Concrete
 
             var expirationDate = payload?.Events?
                 .FirstOrDefault(e => string.Equals(e.EventAction, ExpirationEventAction, StringComparison.OrdinalIgnoreCase))
-                ?.EventDate;
+                ?.EventDate?.UtcDateTime;
 
             return new RdapLookupResult(IsAvailable: false, ExpirationDate: expirationDate);
         }

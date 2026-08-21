@@ -1,3 +1,5 @@
+using DomainTracker.DataAccess.Enums;
+using DomainTracker.DataAccess.Models;
 using DomainTracker.Entities.Models;
 
 namespace DomainTracker.DataAccess.Abstract
@@ -8,6 +10,8 @@ namespace DomainTracker.DataAccess.Abstract
 
         Task<FavoriteDomain?> GetByIdWithDomainAsync(int id);
 
-        Task<bool> ExistsAsync(int userId, int domainId);
+        Task<(AddFavoriteOutcome Outcome, FavoriteDomain? Favorite)> AddFavoriteAsync(int userId, string domainName, DomainCheckInfo checkInfo);
+
+        Task RefreshDomainAsync(FavoriteDomain favorite, DomainCheckInfo checkInfo);
     }
 }

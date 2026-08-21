@@ -1,14 +1,18 @@
+using System.Threading.RateLimiting;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using DomainTracker.API;
 using DomainTracker.API.IoC;
 using DomainTracker.API.Middleware;
 using DomainTracker.Business.Abstract;
 using DomainTracker.Business.Concrete;
 using DomainTracker.Business.Mapping;
 using DomainTracker.Core.Constants;
+using DomainTracker.Core.Results;
 using DomainTracker.Core.Settings;
 using DomainTracker.DataAccess.Context;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
@@ -54,6 +58,28 @@ try
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
 
+    // Limit domain check requests to avoid sending too many requests to the RDAP service.
+    // The limit is applied per client IP.
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.AddPolicy(RateLimiterPolicies.DomainCheck, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+        options.OnRejected = async (context, cancellationToken) =>
+        {
+            context.HttpContext.Response.StatusCode = HttpStatusCodes.TooManyRequests;
+            context.HttpContext.Response.ContentType = "application/json";
+            var response = new ErrorResult(HttpStatusCodes.TooManyRequests, Messages.TooManyRequests);
+            await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+        };
+    });
+
     if (string.IsNullOrWhiteSpace(builder.Configuration[$"{JwtSettings.SectionName}:Key"]))
     {
         throw new InvalidOperationException(Messages.JwtKeyMissing);
@@ -97,6 +123,7 @@ try
     app.UseHttpsRedirection();
 
     app.UseRouting();
+    app.UseRateLimiter();
     app.UseMiddleware<JwtAuthenticationMiddleware>();
     app.UseAuthorization();
 

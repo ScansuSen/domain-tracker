@@ -20,10 +20,9 @@ public static class Messages
 
     public static string FavoriteNotFound(int favoriteId) => $"Favorite with id '{favoriteId}' was not found.";
 
-    public static string DomainNotPersistedAfterCheck(string domainName) =>
-        $"Domain '{domainName}' was not persisted by the availability check.";
-
     public const string RdapServiceUnreachable = "Unable to reach the domain availability service. Please try again later.";
+
+    public const string TooManyRequests = "Too many domain checks from this client. Please try again in a minute.";
 
     public const string UnexpectedError = "An unexpected error occurred. Please try again later.";
 
@@ -39,7 +38,7 @@ public static class Messages
 
     public const string PasswordRequired = "Password is required.";
 
-    public const string PasswordTooShort = "Password must be at least 6 characters long.";
+    public static string PasswordTooShort(int minimumLength) => $"Password must be at least {minimumLength} characters long.";
 
     public const string PasswordTooLong = "Password must be at most 100 characters long.";
 

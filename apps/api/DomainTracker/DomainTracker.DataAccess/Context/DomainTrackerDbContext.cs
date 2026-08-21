@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using DomainTracker.Entities.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace DomainTracker.DataAccess.Context;
 
@@ -57,6 +58,31 @@ public partial class DomainTrackerDbContext : DbContext
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.Property(e => e.Username).HasMaxLength(100);
         });
+
+        // SQL Server datetime2 doesn't store timezone information.
+        // Treat all DateTime values as UTC when reading from the database.
+        var utcConverter = new ValueConverter<DateTime, DateTime>(
+            v => v.Kind == DateTimeKind.Utc ? v : DateTime.SpecifyKind(v, DateTimeKind.Utc),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        var nullableUtcConverter = new ValueConverter<DateTime?, DateTime?>(
+            v => v.HasValue ? (v.Value.Kind == DateTimeKind.Utc ? v.Value : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)) : v,
+            v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime))
+                {
+                    property.SetValueConverter(utcConverter);
+                }
+                else if (property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(nullableUtcConverter);
+                }
+            }
+        }
 
         OnModelCreatingPartial(modelBuilder);
     }

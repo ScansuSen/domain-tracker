@@ -78,13 +78,13 @@ Case'de istenen temel işlemlerin tamamı API tarafında bulunuyor:
 | ------ | ----------------------------- | ----- | -------------------------------------- |
 | POST   | `/api/auth/register`          | Hayır | Yeni kullanıcı oluşturur               |
 | POST   | `/api/auth/login`             | Hayır | Kullanıcı girişi yapar ve JWT döner    |
-| GET    | `/api/domains/check?name=`    | Hayır | Domaini RDAP üzerinden kontrol eder    |
+| GET    | `/api/domains/check?name=`    | JWT   | Domaini RDAP üzerinden kontrol eder    |
 | GET    | `/api/favorites`              | JWT   | Kullanıcının favorilerini getirir      |
 | POST   | `/api/favorites`              | JWT   | Domaini favorilere ekler               |
 | DELETE | `/api/favorites/{id}`         | JWT   | Favoriyi siler                         |
 | POST   | `/api/favorites/{id}/refresh` | JWT   | Domain bilgilerini tekrar kontrol eder |
 
-Case dokümanında authentication ayrıca istenmiyordu. Ancak favorilerin kullanıcıya özel olması gerektiğini düşündüğüm için basit bir register/login akışı ekledim. Böylece her kullanıcı kendi favori listesini yönetebiliyor.
+Case dokümanında authentication ayrıca istenmiyordu. Ancak favorilerin kullanıcıya özel olması gerektiğini düşündüğüm için basit bir register/login akışı ekledim. Böylece her kullanıcı kendi favori listesini yönetebiliyor. Domain sorgulama endpoint'i de bu login akışının arkasında; frontend'deki arama ekranı da login olmadan açılmıyor.
 
 JWT gerektiren endpoint'lerde token:
 
@@ -111,7 +111,6 @@ API cevaplarında ortak bir result yapısı kullanılıyor:
 
 * .NET 8 SDK
 * SQL Server
-* İsteğe bağlı olarak `dotnet-ef`
 
 Öncelikle `apps/api/DomainTracker/DomainTracker.API/appsettings.json` içerisindeki connection string kendi SQL Server bağlantınıza göre düzenlenmelidir.
 
@@ -151,13 +150,19 @@ Business servislerinin bağımlılıkları mocklandığı için testler SQL Serv
 
 ## Bazı Tasarım Kararları
 
-Domain bilgilerini doğrudan kullanıcıya bağlamak yerine `Domains` ve `FavoriteDomains` yapılarını ayırdım. `Domains` domainin kendisini ve son sorgu sonucunu tutarken, `FavoriteDomains` kullanıcının hangi domainleri takip ettiğini tutuyor. Böylece iki kullanıcı aynı domaini favorilerine eklediğinde aynı domain bilgisi veritabanında tekrar tekrar oluşturulmuyor.
+Domain bilgilerini doğrudan kullanıcıya bağlamak yerine `Domains` ve `FavoriteDomains` yapılarını ayırdım. `Domains` domainin kendisini ve son sorgu sonucunu tutarken, `FavoriteDomains` kullanıcının hangi domainleri takip ettiğini tutuyor. Böylece iki kullanıcı aynı domaini favorilerine eklediğinde aynı domain bilgisi veritabanında tekrar tekrar oluşturulmuyor. Bir domain favorilere eklenirken hem `Domains` satırının oluşturulması/güncellenmesi hem `FavoriteDomains` bağlantısının eklenmesi tek bir `SaveChanges` çağrısında, yani tek bir transaction içinde yapılıyor; biri başarısız olursa diğeri de kaydedilmiyor.
 
-Bir domain favorilere eklenirken RDAP üzerinden tekrar kontrol ediliyor. Bunun nedeni daha önce sorgulanmış bir domainin eski bilgisiyle favorilere eklenmesini engellemek.
+Bir domain favorilere eklenirken RDAP üzerinden tekrar kontrol ediliyor. Bunun nedeni daha önce sorgulanmış bir domainin eski bilgisiyle favorilere eklenmesini engellemek. Domain kontrolünün kendisi (`CheckAsync`) ise veritabanına hiç yazmayan, saf bir RDAP sorgusu; bir domain yalnızca favorilere eklenirken veya bir favori yenilenirken kalıcı hale geliyor. Böylece login olmuş bir kullanıcı bile sadece arama yaparak (favorilemeden) `Domains` tablosunu büyütemiyor.
 
 RDAP tarafında da yalnızca `404` cevabını "domain kullanılabilir" olarak değerlendiriyorum. Bağlantı problemi veya beklenmeyen bir HTTP cevabı geldiğinde domaini yanlışlıkla kullanılabilir göstermek yerine API hata döndürüyor.
 
-Data access tarafında ortak `GetById`, `Add`, `Update` ve `Delete` işlemleri generic repository içerisinde bulunuyor. Böylece generic repository'yi her entity'nin özel ihtiyacını karşılamaya çalışan büyük bir yapıya dönüştürmemeye çalıştım.
+Domain sorgulama endpoint'i login gerektiriyor ve IP başına dakikada 20 istekle sınırlı. Login şartı frontend'deki arama ekranının da login arkasında olmasıyla tutarlı; rate limiting ise tek bir hesabın kısa sürede çok sayıda istekle RDAP servisini zorlayıp bu servisin sunucunun IP'sini engellemesine yol açmasını önlemek için ekledim.
+
+`Domains`, `FavoriteDomains` ve `Users` tablolarındaki tüm `DateTime` alanları için `DomainTrackerDbContext` seviyesinde ortak bir value converter kullanıyorum; veritabanından okunan her tarih `Kind=Utc` olarak damgalanıyor. SQL Server `datetime2` kolonu timezone bilgisi tutmadığı için bu converter olmadan bazı response'larda tarih `Z` son eki olmadan dönebiliyor, tarayıcı da bunu yanlışlıkla yerel saat sanabiliyor.
+
+Data access tarafında ortak veritabanı işlemleri için generic bir repository yapısı oluşturdum. GetById, Add, Update ve Delete gibi temel işlemler bu yapı üzerinden yönetiliyor.
+
+Her metoda ayrı ayrı try-catch eklemek yerine, exception yönetimini merkezi bir noktadan gerçekleştirmek için global exception handler yapısı kullandım.
 
 Beklenen validation, authentication, not found veya conflict gibi durumlarda servisler uygun result'ı dönüyor. Beklenmeyen hatalar ise merkezi exception handler tarafından yakalanıyor.
 
@@ -173,7 +178,7 @@ RDAP servisi şu anda her domain kontrolünde çağrılıyor. Gerçek kullanımd
 
 Test tarafında şu an business servislerini kapsayan unit testler bulunuyor. Daha kapsamlı bir projede bunlara integration testler de eklerdim. Özellikle routing, authentication middleware, model binding, database işlemleri ve API response'larının birlikte doğru çalıştığını görmek için `WebApplicationFactory` üzerinden API seviyesinde testler yazılabilir.
 
-Favori listesi case kapsamında küçük olacağı için tek seferde dönüyor. Gerçek kullanımda veri miktarı büyüdüğünde pagination eklemek daha doğru olurdu. Benzer şekilde dışarıya açık domain sorgulama endpoint'i için rate limiting ve servisin durumunu takip edebilmek için health check gibi operasyonel ihtiyaçları da production aşamasında değerlendirirdim.
+Favori listesi case kapsamında küçük olacağı için tek seferde dönüyor. Gerçek kullanımda veri miktarı büyüdüğünde pagination eklemek daha doğru olurdu. Servisin durumunu dışarıdan takip edebilmek için health check gibi operasyonel ihtiyaçları da production aşamasında değerlendirirdim.
 
 ---
 

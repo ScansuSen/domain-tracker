@@ -33,28 +33,14 @@ namespace DomainTracker.Business.Concrete
                 return new ErrorDataResult<DomainResponseDto>(HttpStatusCodes.BadRequest, validationResult.ToMessages());
 
             var rdapResult = await _rdapClient.LookupAsync(normalizedName);
-            var now = DateTime.UtcNow;
 
-            var domain = await _domainRepository.GetByNameAsync(normalizedName);
-            if (domain is null)
+            var domain = new Domain
             {
-                domain = new Domain
-                {
-                    Name = normalizedName,
-                    IsAvailable = rdapResult.IsAvailable,
-                    LastCheckedAt = now,
-                    ExpirationDate = rdapResult.ExpirationDate,
-                };
-                await _domainRepository.AddAsync(domain);
-            }
-            else
-            {
-                domain.IsAvailable = rdapResult.IsAvailable;
-                domain.LastCheckedAt = now;
-                domain.ExpirationDate = rdapResult.ExpirationDate;
-                domain.UpdatedAt = now;
-                await _domainRepository.UpdateAsync(domain);
-            }
+                Name = normalizedName,
+                IsAvailable = rdapResult.IsAvailable,
+                LastCheckedAt = DateTime.UtcNow,
+                ExpirationDate = rdapResult.ExpirationDate,
+            };
 
             return new SuccessDataResult<DomainResponseDto>(_mapper.Map<DomainResponseDto>(domain));
         }
