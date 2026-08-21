@@ -156,7 +156,7 @@ Bir domain favorilere eklenirken RDAP üzerinden tekrar kontrol ediliyor. Bunun 
 
 RDAP tarafında da yalnızca `404` cevabını "domain kullanılabilir" olarak değerlendiriyorum. Bağlantı problemi veya beklenmeyen bir HTTP cevabı geldiğinde domaini yanlışlıkla kullanılabilir göstermek yerine API hata döndürüyor.
 
-Domain sorgulama endpoint'i login gerektiriyor ve IP başına dakikada 20 istekle sınırlı. Login şartı frontend'deki arama ekranının da login arkasında olmasıyla tutarlı; rate limiting ise tek bir hesabın kısa sürede çok sayıda istekle RDAP servisini zorlayıp bu servisin sunucunun IP'sini engellemesine yol açmasını önlemek için ekledim.
+Domain sorgulama endpoint'i login gerektiriyor ve kullanıcı başına dakikada 20 istekle sınırlı. Login şartı frontend'deki arama ekranının da login arkasında olmasıyla tutarlı; rate limiting ise tek bir hesabın kısa sürede çok sayıda istekle RDAP servisini zorlayıp bu servisin sunucunun IP'sini engellemesine yol açmasını önlemek için ekledim. Sınırlama, client IP yerine kimliği doğrulanmış kullanıcıya göre uygulanıyor.
 
 `Domains`, `FavoriteDomains` ve `Users` tablolarındaki tüm `DateTime` alanları için `DomainTrackerDbContext` seviyesinde ortak bir value converter kullanıyorum; veritabanından okunan her tarih `Kind=Utc` olarak damgalanıyor. SQL Server `datetime2` kolonu timezone bilgisi tutmadığı için bu converter olmadan bazı response'larda tarih `Z` son eki olmadan dönebiliyor, tarayıcı da bunu yanlışlıkla yerel saat sanabiliyor.
 
