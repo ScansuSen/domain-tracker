@@ -2,6 +2,7 @@ using DomainTracker.Business.Abstract;
 using DomainTracker.DTOs.Favorites;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace DomainTracker.API.Controllers
 {
@@ -38,6 +39,7 @@ namespace DomainTracker.API.Controllers
         }
 
         [HttpPost("{id:int}/refresh")]
+        [EnableRateLimiting(RateLimiterPolicies.DomainCheck)]
         public async Task<IActionResult> Refresh(int id)
         {
             var result = await _favoriteDomainService.RefreshAsync(CurrentUserId, id);
