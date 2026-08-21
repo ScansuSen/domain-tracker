@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
@@ -58,18 +59,23 @@ try
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
 
-    // Limit domain check requests to avoid sending too many requests to the RDAP service.
-    // The limit is applied per client IP.
     builder.Services.AddRateLimiter(options =>
     {
-        options.AddPolicy(RateLimiterPolicies.DomainCheck, httpContext => RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 20,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            }));
+        options.AddPolicy(RateLimiterPolicies.DomainCheck, httpContext =>
+        {
+            var partitionKey = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown";
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                });
+        });
 
         options.OnRejected = async (context, cancellationToken) =>
         {
@@ -123,8 +129,8 @@ try
     app.UseHttpsRedirection();
 
     app.UseRouting();
-    app.UseRateLimiter();
     app.UseMiddleware<JwtAuthenticationMiddleware>();
+    app.UseRateLimiter();
     app.UseAuthorization();
 
     app.MapControllers();
